@@ -1,0 +1,2261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kronos 金融预测平台</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-locale-zh-cn-latest.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f172a; /* slate-900 */
+            min-height: 100vh;
+            color: #e2e8f0; /* slate-200 */
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #e2e8f0;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .control-panel {
+            background: #111827; /* gray-900 */
+            border-radius: 15px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            max-width: 100%;
+            border: 1px solid #1f2937; /* gray-800 */
+            display: grid;              /* clean grid layout */
+            grid-template-columns: repeat(3, minmax(260px, 1fr));
+            gap: 16px 20px;             /* row-gap col-gap */
+            align-items: stretch;       /* make items equal height per row */
+        }
+
+        .control-panel h2 {
+            color: #cbd5e1;
+            margin: 0 0 6px 0;
+            font-size: 1.2rem;
+            border: none;
+            padding: 0;
+            white-space: nowrap;
+            grid-column: 1 / -1;        /* span full width */
+        }
+
+        /* visual grouped panels */
+        .panel-group {
+            background: #0b1220;
+            border: 1px solid #1f2937;
+            border-radius: 10px;
+            padding: 12px 14px;
+            display: flex;                 /* equal-height card */
+            flex-direction: column;
+            gap: 12px;                     /* vertical spacing between items */
+            height: 100%;
+            min-height: auto;              /* unified minimum height */
+        }
+
+        /* Improve spacing inside each form group */
+        .panel-group .form-group { margin-bottom: 0; gap: 8px; }
+        .panel-group .form-group label { margin-bottom: 4px; }
+        .panel-group .form-group .form-text { margin-top: 4px; }
+
+        /* Separate buttons from inputs for breathing room */
+        .panel-group .btn { margin-top: 8px; align-self: start; }
+        #predict-by-code-btn { align-self: center; }
+        #load-data-btn { align-self: center; }
+        #load-model-btn { align-self: center; }
+        .panel-group .btn + .form-text { margin-top: 8px; }
+
+        /* Growable content inside cards to balance heights */
+        .panel-group .data-info,
+        .panel-group .time-window-container { flex: 1 1 auto; overflow: auto; }
+
+        /* Add subtle column spacing within the control grid already via gap, but bump min heights */
+        .control-panel .form-group select,
+        .control-panel .form-group input { min-height: 44px; }
+
+        .form-group {
+            margin-bottom: 0;            /* compact in grid */
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #374151; /* gray-700 */
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+            background: #0b1220;
+            color: #e5e7eb;
+        }
+
+        /* Compact widths inside inline control panel */
+        .control-panel .form-group select,
+        .control-panel .form-group input { width: 100%; }
+
+        .form-group select:focus,
+        .form-group input:focus {
+            outline: none;
+            border-color: #60a5fa; /* blue-400 */
+        }
+
+        /* Prediction quality parameter styles */
+        .form-group input[type="range"] { width: 100%; margin-right: 0; }
+
+        .form-group input[type="number"] {
+            width: 100%;
+        }
+
+        .form-group span {
+            display: inline-block;
+            min-width: 40px;
+            font-weight: 600;
+            color: #93c5fd; /* blue-300 */
+        }
+
+        .form-text {
+            font-size: 12px;
+            color: #94a3b8; /* slate-400 */
+            margin-top: 5px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #1f2937 0%, #0b1220 100%);
+            color: #e5e7eb;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            width: auto;                 /* don't stretch buttons */
+            margin-bottom: 10px;
+        }
+
+        .control-panel .btn { white-space: nowrap; margin-bottom: 0; justify-self: start; align-self: end; }
+
+        /* Hide full-width separators inside inline control panel */
+        .control-panel hr { display: none; }
+
+        /* Make time window block span a full row for visual balance */
+        .control-panel .time-window-container { grid-column: 1 / -1; }
+        #model-status { grid-column: 1 / -1; }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(2,6,23,0.6);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #334155 0%, #1f2937 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #065f46 0%, #064e3b 100%);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.success {
+            background: #064e3b;
+            color: #a7f3d0;
+            border: 1px solid #10b981;
+        }
+
+        .status.error {
+            background: #7f1d1d;
+            color: #fecaca;
+            border: 1px solid #f87171;
+        }
+
+        .status.info {
+            background: #0c4a6e;
+            color: #bae6fd;
+            border: 1px solid #38bdf8;
+        }
+
+        .status.warning {
+            background: #7c2d12;
+            color: #fed7aa;
+            border: 1px solid #fb923c;
+        }
+
+        .chart-container {
+            background: #0b1220;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            min-height: 1100px;
+            width: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
+            border: 1px solid #1f2937;
+        }
+
+        .chart-container h2 {
+            color: #cbd5e1;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #1f2937;
+            padding-bottom: 10px;
+        }
+
+        #chart {
+            width: 100%;
+            max-width: 100%;
+            height: 1000px;
+            min-height: 1000px;
+        }
+
+        .data-info {
+            background: #0b1220;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .data-info h3 {
+            color: #cbd5e1;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .data-info p {
+            margin-bottom: 5px;
+            color: #94a3b8;
+        }
+
+        .data-info strong {
+            color: #e5e7eb;
+        }
+
+        /* Time window selector styles */
+        .time-window-container {
+            background: #0b1220;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .time-window-container h3 {
+            color: #cbd5e1;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .time-window-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .time-window-slider {
+            position: relative;
+            margin-bottom: 10px;
+        }
+
+        .slider-track {
+            position: relative;
+            height: 6px;
+            background: #1f2937;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .slider-handle {
+            position: absolute;
+            top: -7px;
+            width: 20px;
+            height: 20px;
+            background: #2563eb;
+            border-radius: 50%;
+            cursor: grab;
+            border: 2px solid #0b1220;
+            box-shadow: 0 2px 4px rgba(2,6,23,0.6);
+            z-index: 10;
+        }
+
+        .slider-handle:hover {
+            background: #1d4ed8;
+            transform: scale(1.1);
+        }
+
+        .slider-handle:active {
+            cursor: grabbing;
+        }
+
+        .slider-selection {
+            position: absolute;
+            height: 6px;
+            background: #10b981;
+            border-radius: 3px;
+            top: 0;
+        }
+
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+
+        /* Comparison analysis styles */
+        .comparison-section {
+            background: #0b1220;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .comparison-section h3 {
+            color: #cbd5e1;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .comparison-info {
+            background: #0f172a;
+            border: 1px solid #1f2937;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            border: 1px solid #1f2937;
+            padding: 8px;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .comparison-table th {
+            background: #0b1220;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        .error-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .error-stat {
+            background: #0b1220;
+            border: 1px solid #1f2937;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .error-stat h4 {
+            color: #cbd5e1;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        .error-stat .value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #93c5fd;
+        }
+
+        .error-stat .unit {
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #1f2937;
+            border-top: 4px solid #60a5fa;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @media (max-width: 1280px) {
+            .control-panel { grid-template-columns: repeat(3, minmax(220px, 1fr)); }
+        }
+        @media (max-width: 980px) {
+            .control-panel { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+        }
+        @media (max-width: 640px) {
+            .control-panel { grid-template-columns: 1fr; }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .model-info {
+            background: #e6fffa;
+            border: 1px solid #81e6d9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .model-info h3 {
+            color: #234e52;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .model-info p {
+            margin-bottom: 5px;
+            color: #234e52;
+        }
+
+        .model-info strong {
+            color: #0f2027;
+        }
+
+        /* ── 使用教程弹窗 ── */
+        .help-btn {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #1e40af;
+            color: #e2e8f0;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 7px 16px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+        .help-btn:hover { background: #2563eb; }
+
+        .header { position: relative; }
+
+        @media (max-width: 540px) {
+            .header {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            .help-btn {
+                position: static;
+                transform: none;
+                width: auto;
+                align-self: center;
+            }
+        }
+
+        #help-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(3px);
+        }
+        #help-modal.open { display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; }
+
+        .help-modal-box {
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 860px;
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+        }
+        .help-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid #1f2937;
+            flex-shrink: 0;
+        }
+        .help-modal-header span { font-size: 1.05rem; font-weight: 600; color: #e2e8f0; }
+        .help-modal-close {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.4rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .help-modal-close:hover { background: #1f2937; color: #e2e8f0; }
+
+        .help-modal-body {
+            overflow-y: auto;
+            padding: 24px 28px;
+            flex: 1;
+            color: #cbd5e1;
+            line-height: 1.75;
+            font-size: 0.92rem;
+        }
+        /* Markdown 内容样式 */
+        .help-modal-body h1 { font-size: 1.5rem; color: #f1f5f9; margin: 0 0 16px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+        .help-modal-body h2 { font-size: 1.15rem; color: #93c5fd; margin: 28px 0 10px; }
+        .help-modal-body h3 { font-size: 1rem; color: #7dd3fc; margin: 20px 0 8px; }
+        .help-modal-body h4 { font-size: 0.95rem; color: #94a3b8; margin: 16px 0 6px; }
+        .help-modal-body p  { margin: 0 0 10px; }
+        .help-modal-body ul, .help-modal-body ol { margin: 0 0 10px 20px; }
+        .help-modal-body li { margin-bottom: 4px; }
+        .help-modal-body code {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85em;
+            color: #86efac;
+        }
+        .help-modal-body pre {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 14px 16px;
+            overflow-x: auto;
+            margin: 0 0 14px;
+        }
+        .help-modal-body pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #86efac;
+            font-size: 0.85rem;
+        }
+        .help-modal-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0 0 14px;
+            font-size: 0.88rem;
+        }
+        .help-modal-body th {
+            background: #1e293b;
+            color: #93c5fd;
+            padding: 7px 12px;
+            text-align: left;
+            border: 1px solid #334155;
+        }
+        .help-modal-body td {
+            padding: 6px 12px;
+            border: 1px solid #1f2937;
+            color: #cbd5e1;
+        }
+        .help-modal-body tr:nth-child(even) td { background: #0b1220; }
+        .help-modal-body blockquote {
+            border-left: 3px solid #3b82f6;
+            margin: 0 0 12px;
+            padding: 6px 14px;
+            background: #0f172a;
+            color: #94a3b8;
+            border-radius: 0 6px 6px 0;
+        }
+        .help-modal-body a { color: #60a5fa; }
+        .help-modal-body hr { border: none; border-top: 1px solid #1f2937; margin: 20px 0; }
+
+        /* 品种搜索自动补全 */
+        .symbol-ac-wrap { position: relative; }
+        .symbol-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0; z-index: 2000;
+            background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+            max-height: 220px; overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: none;
+        }
+        .symbol-dd-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 7px 12px; cursor: pointer;
+            border-bottom: 1px solid #1e293b88; font-size: 0.9em;
+        }
+        .symbol-dd-item:last-child { border-bottom: none; }
+        .symbol-dd-item:hover, .symbol-dd-item.sdi-active { background: #1e40af55; }
+        .symbol-dd-item .sdi-code { font-weight: 700; color: #60a5fa; min-width: 52px; }
+        .symbol-dd-item .sdi-name { color: #e2e8f0; flex: 1; }
+        .symbol-dd-item .sdi-exchange { color: #64748b; font-size: 0.82em; }
+
+        /* 数据源配置弹窗 */
+        #datasource-modal {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,0.72); backdrop-filter: blur(4px);
+        }
+        #datasource-modal.open { display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+        .ds-modal-box {
+            background: #0f172a; border: 1px solid #1e293b;
+            border-radius: 14px; width: 100%; max-width: 540px;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7); overflow: hidden;
+        }
+        /* 标题栏 */
+        .ds-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 18px 24px 16px; border-bottom: 1px solid #1e293b;
+            background: linear-gradient(135deg,#0f172a,#1e293b);
+        }
+        .ds-modal-header span { font-size: 1.05rem; font-weight: 700; color: #f1f5f9; letter-spacing: .02em; }
+        /* Tab 导航 */
+        .ds-tab-bar {
+            display: flex; gap: 0; background: #0a0f1a;
+            border-bottom: 1px solid #1e293b;
+        }
+        .ds-tab {
+            flex: 1; padding: 11px 8px; font-size: 0.85rem; font-weight: 500;
+            color: #64748b; background: transparent; border: none; cursor: pointer;
+            border-bottom: 2px solid transparent; transition: all .18s;
+        }
+        .ds-tab:hover { color: #94a3b8; background: #ffffff08; }
+        .ds-tab.active { color: #60a5fa; border-bottom-color: #3b82f6; background: #1e293b22; }
+        /* Tab 内容 */
+        .ds-pane { display: none; padding: 24px; }
+        .ds-pane.active { display: block; }
+        /* 状态指示器 */
+        .ds-status-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500;
+        }
+        .ds-status-badge.ok  { background: #14532d44; color: #4ade80; border: 1px solid #16a34a55; }
+        .ds-status-badge.err { background: #7f1d1d44; color: #f87171; border: 1px solid #dc262655; }
+        .ds-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        /* 表单行 */
+        .ds-field { margin-bottom: 14px; }
+        .ds-field:last-child { margin-bottom: 0; }
+        .ds-field label { display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 5px; font-weight: 500; }
+        .ds-field input, .ds-field select {
+            width: 100%; box-sizing: border-box;
+            background: #1e293b; border: 1px solid #334155; border-radius: 7px;
+            color: #e2e8f0; padding: 9px 12px; font-size: 0.88rem;
+            transition: border-color .15s;
+        }
+        .ds-field input:focus, .ds-field select:focus { outline: none; border-color: #3b82f6; }
+        .ds-field input::placeholder { color: #475569; }
+        .ds-row { display: flex; gap: 10px; align-items: flex-end; }
+        .ds-row .ds-field { flex: 1; margin-bottom: 0; }
+        /* 辅助文字 */
+        .ds-hint { font-size: 0.78rem; color: #475569; margin-top: 5px; }
+        /* 分割线 */
+        .ds-divider { height: 1px; background: #1e293b; margin: 18px 0; }
+        /* 品种库状态卡片 */
+        .ds-cache-card {
+            background: #1e293b; border-radius: 8px; padding: 12px 14px;
+            font-size: 0.82rem; color: #94a3b8; display: flex;
+            align-items: center; justify-content: space-between; gap: 8px;
+            margin-bottom: 14px;
+        }
+        .ds-cache-card strong { color: #e2e8f0; }
+        /* 手动新增三列网格 */
+        .ds-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 4px; }
+        .ds-status-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; }
+
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+            
+            #chart {
+                height: 600px;
+                min-height: 600px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Kronos 金融预测平台</h1>
+            <p>基于AI的金融K线数据预测分析平台</p>
+            <button class="help-btn" onclick="openHelp()">使用教程</button>
+        </div>
+
+        <!-- 使用教程弹窗 -->
+        <!-- 数据源配置弹窗 -->
+        <div id="datasource-modal" onclick="closeDatasourceOnBg(event)">
+            <div class="ds-modal-box">
+                <div class="ds-modal-header">
+                    <span> 数据源配置</span>
+                    <button class="help-modal-close" onclick="closeDatasourceModal()">×</button>
+                </div>
+                <!-- Tab 导航 -->
+                <div class="ds-tab-bar">
+                    <button class="ds-tab active" onclick="dsTab('stock',this)">A股数据</button>
+                    <button class="ds-tab" onclick="dsTab('futures',this)">期货数据</button>
+                    <button class="ds-tab" onclick="dsTab('symbols',this)">品种库</button>
+                </div>
+
+                <!-- A股数据 Tab -->
+                <div id="ds-pane-stock" class="ds-pane active">
+                    <div class="ds-field">
+                        <label>数据来源</label>
+                        <div style="font-size:0.9rem;color:#cbd5e1;margin-bottom:12px;">
+                            Tushare Pro · 提供 A 股日线、财务、指数等数据
+                            <a href="https://tushare.pro" target="_blank" style="color:#60a5fa;margin-left:8px;font-size:0.85em;">注册获取 Token →</a>
+                        </div>
+                    </div>
+                    <div class="ds-field">
+                        <label>当前状态</label>
+                        <span id="token-status-modal" class="ds-status-badge">未配置</span>
+                    </div>
+                    <div class="ds-divider"></div>
+                    <div class="ds-field">
+                        <label>Tushare Token</label>
+                        <div class="ds-row" style="align-items:stretch;">
+                            <input type="password" id="tushare-token" placeholder="粘贴 Token（ts_xxxxxxxxxxxxxxxx）" style="flex:1;">
+                            <button id="save-token-btn" class="btn btn-secondary" style="white-space:nowrap;">保存</button>
+                        </div>
+                        <div class="ds-hint">Token 仅保存在本地配置文件中，不会上传</div>
+                    </div>
+                </div>
+
+                <!-- 期货数据 Tab -->
+                <div id="ds-pane-futures" class="ds-pane">
+                    <div class="ds-field">
+                        <label>数据来源</label>
+                        <div style="font-size:0.9rem;color:#cbd5e1;margin-bottom:12px;">
+                            天勤量化 TQSdk · 提供全市场期货实时/历史 K 线数据
+                            <a href="https://www.shinnytech.com" target="_blank" style="color:#60a5fa;margin-left:8px;font-size:0.85em;">注册账号 →</a>
+                        </div>
+                    </div>
+                    <div class="ds-field">
+                        <label>当前状态</label>
+                        <span id="tqsdk-status-modal" class="ds-status-badge">未配置</span>
+                    </div>
+                    <div class="ds-divider"></div>
+                    <div class="ds-field">
+                        <label>天勤用户名</label>
+                        <input type="text" id="tqsdk-username" placeholder="注册邮箱或手机号">
+                    </div>
+                    <div class="ds-field">
+                        <label>天勤密码</label>
+                        <div class="ds-row" style="align-items:stretch;">
+                            <input type="password" id="tqsdk-password" placeholder="登录密码" style="flex:1;">
+                            <button id="save-tqsdk-btn" class="btn btn-secondary" style="white-space:nowrap;">保存</button>
+                        </div>
+                        <div class="ds-hint">账号信息仅保存在本地配置文件中，不会上传</div>
+                    </div>
+                </div>
+
+                <!-- 品种库 Tab -->
+                <div id="ds-pane-symbols" class="ds-pane">
+                    <!-- 自动同步 -->
+                    <div class="ds-field">
+                        <label>自动同步</label>
+                        <div style="font-size:0.85rem;color:#94a3b8;margin-bottom:10px;">
+                            从天勤 TQSdk 拉取全市场所有期货品种，自动更新代码识别和中文名搜索库
+                        </div>
+                        <div class="ds-row" style="align-items:center;">
+                            <button id="refresh-symbols-btn" class="btn btn-secondary" onclick="refreshSymbolsLib()">立即同步</button>
+                            <span id="refresh-symbols-status" style="font-size:0.85em;color:#94a3b8;"></span>
+                        </div>
+                    </div>
+                    <div id="symbols-cache-info" class="ds-cache-card" style="display:none;"></div>
+                    <div class="ds-divider"></div>
+                    <!-- 手动新增 -->
+                    <div class="ds-field">
+                        <label>手动新增品种</label>
+                        <div style="font-size:0.78rem;color:#475569;margin-bottom:10px;">遇到不认识的代码时，手动补充到本地品种库</div>
+                        <div class="ds-grid3">
+                            <div class="ds-field" style="margin-bottom:0;">
+                                <label>品种代码</label>
+                                <input type="text" id="new-symbol-product" placeholder="如 ao">
+                            </div>
+                            <div class="ds-field" style="margin-bottom:0;">
+                                <label>交易所</label>
+                                <select id="new-symbol-exchange">
+                                    <option value="SHFE">SHFE 上期所</option>
+                                    <option value="DCE">DCE 大商所</option>
+                                    <option value="CZCE">CZCE 郑商所</option>
+                                    <option value="CFFEX">CFFEX 中金所</option>
+                                    <option value="INE">INE 上期能源</option>
+                                    <option value="GFEX">GFEX 广期所</option>
+                                </select>
+                            </div>
+                            <div class="ds-field" style="margin-bottom:0;">
+                                <label>中文名（可选）</label>
+                                <input type="text" id="new-symbol-name" placeholder="如 氧化铝">
+                            </div>
+                        </div>
+                        <div style="margin-top:10px;">
+                            <button id="add-symbol-btn" class="btn btn-secondary">保存品种</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="help-modal" onclick="closeHelpOnBg(event)">
+            <div class="help-modal-box">
+                <div class="help-modal-header">
+                    <span>Kronos 使用教程</span>
+                    <button class="help-modal-close" onclick="closeHelp()">×</button>
+                </div>
+                <div class="help-modal-body" id="help-modal-body">
+                    <p style="color:#64748b;">加载中...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="control-panel">
+                <!-- 第一行：列1 模型选择区 -->
+                <div class="panel-group">
+                    <div class="form-group">
+                        <label for="model-select">选择模型：</label>
+                        <select id="model-select">
+                            <option value="">请先加载可用模型</option>
+                        </select>
+                        <small class="form-text">选择要使用的Kronos模型</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="device-select">选择设备：</label>
+                        <select id="device-select">
+                            <option value="cpu">CPU</option>
+                            <option value="cuda">CUDA (NVIDIA GPU)</option>
+                            <option value="mps">MPS (Apple Silicon)</option>
+                        </select>
+                        <small class="form-text">选择运行模型的设备</small>
+                    </div>
+                    <button id="load-model-btn" class="btn btn-secondary">加载模型</button>
+                </div>
+
+                <!-- 第一行：列2 数据源配置 + 代码预测区 -->
+                <div class="panel-group">
+                    <!-- 数据源状态行 -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                        <div style="font-size:0.85em;display:flex;gap:12px;">
+                            <span>股票：<span id="token-status" style="color:#aaa;">未配置</span></span>
+                            <span>期货：<span id="tqsdk-status" style="color:#aaa;">未配置</span></span>
+                        </div>
+                        <button class="btn btn-secondary" style="font-size:0.8em;padding:4px 10px;" onclick="openDatasourceModal()"> 配置数据源</button>
+                    </div>
+                    <!-- 代码输入（支持代码/中文名搜索） -->
+                    <div class="form-group">
+                        <label for="stock-code">代码（股票 / 期货）</label>
+                        <div class="symbol-ac-wrap">
+                            <input type="text" id="stock-code" autocomplete="off"
+                                   placeholder="代码 rb2610 / 中文名 螺纹钢 / 股票 600036"
+                                   oninput="symbolAcSearch(this.value)"
+                                   onkeydown="symbolAcKeyNav(event)"
+                                   onblur="setTimeout(()=>symbolAcHide(),150)">
+                            <div id="symbol-dropdown" class="symbol-dropdown"></div>
+                        </div>
+                        <small class="form-text">
+                            输入代码（rb2610、SR607）或<b>中文品种名</b>自动搜索；股票输入6位数字
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label for="kline-period">K线周期</label>
+                        <select id="kline-period" onchange="updateKlinePeriodLabels()">
+                            <option value="1d">日K</option>
+                            <option value="1h">1小时K（仅期货）</option>
+                            <option value="30m">30分钟K（仅期货）</option>
+                            <option value="15m">15分钟K（仅期货）</option>
+                        </select>
+                        <small class="form-text">分钟K线需要天勤 TQSdk 账号；股票仅支持日K</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="code-lookback" id="code-lookback-label">回溯交易日数</label>
+                        <input type="number" id="code-lookback" value="100" min="30" max="500">
+                        <small class="form-text" id="code-lookback-hint">拉取最近 N 个交易日的历史数据，100≈5个月，250≈1年</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="pred-trading-days" id="pred-trading-days-label">预测交易日数</label>
+                        <input type="number" id="pred-trading-days" value="22" min="5" max="60">
+                        <small class="form-text" id="pred-trading-days-hint">约1个月=22个交易日</small>
+                    </div>
+                    <button id="predict-by-code-btn" class="btn btn-success">按代码直接预测</button>
+                </div>
+
+                <!-- 第一行：列3 统一文件预测 -->
+                <div class="panel-group">
+                    <div class="form-group">
+                        <label for="data-file-select">选择数据文件：</label>
+                        <select id="data-file-select">
+                            <option value="">请先加载数据文件列表</option>
+                        </select>
+                    </div>
+                    <button id="load-data-btn" class="btn btn-secondary">加载数据</button>
+                    <div id="data-info" class="data-info" style="display: none;">
+                        <h3>数据信息</h3>
+                        <p><strong>行数：</strong> <span id="data-rows">-</span></p>
+                        <p><strong>列数：</strong> <span id="data-cols">-</span></p>
+                        <p><strong>时间范围：</strong> <span id="data-time-range">-</span></p>
+                        <p><strong>价格范围：</strong> <span id="data-price-range">-</span></p>
+                        <p><strong>时间频率：</strong> <span id="data-timeframe">-</span></p>
+                        <p><strong>预测列：</strong> <span id="data-prediction-cols">-</span></p>
+                    </div>
+
+                    <!-- 预测模式选择 -->
+                    <div style="padding:8px 0; border-top:1px solid #1f2937; border-bottom:1px solid #1f2937; margin:4px 0;">
+                        <span style="font-size:0.85em; color:#8b949e; margin-right:10px;">预测模式：</span>
+                        <label style="cursor:pointer; margin-right:16px; color:#e5e7eb; font-size:0.9em;">
+                            <input type="radio" name="predict-mode" id="mode-backtest" value="backtest" checked style="margin-right:4px;">
+                            回测预测
+                        </label>
+                        <label style="cursor:pointer; color:#e5e7eb; font-size:0.9em;">
+                            <input type="radio" name="predict-mode" id="mode-future" value="future" style="margin-right:4px;">
+                            预测未来
+                        </label>
+                    </div>
+
+                    <!-- 回测模式参数 -->
+                    <div id="backtest-params">
+                        <div style="display:flex; gap:8px; margin-top:4px;">
+                            <div class="form-group" style="flex:1; min-width:0;">
+                                <label for="lookback">回溯窗口大小:</label>
+                                <input type="number" id="lookback" value="400" readonly>
+                                <small class="form-text">固定 400 个数据点</small>
+                            </div>
+                            <div class="form-group" style="flex:1; min-width:0;">
+                                <label for="pred-len">预测长度:</label>
+                                <input type="number" id="pred-len" value="120" readonly>
+                                <small class="form-text">固定 120 个数据点</small>
+                            </div>
+                        </div>
+                        <div class="time-window-container">
+                            <h3>⏰ 时间窗口选择</h3>
+                            <div class="time-window-info">
+                                <span id="window-start">开始: --</span>
+                                <span id="window-end">结束: --</span>
+                                <span id="window-size">窗口大小: 400+120=520 个数据点</span>
+                            </div>
+                            <div class="time-window-slider">
+                                <div class="slider-track">
+                                    <div class="slider-handle start-handle" id="start-handle"></div>
+                                    <div class="slider-selection" id="slider-selection"></div>
+                                    <div class="slider-handle end-handle" id="end-handle"></div>
+                                </div>
+                                <div class="slider-labels">
+                                    <span id="min-label">最早</span>
+                                    <span id="max-label">最新</span>
+                                </div>
+                            </div>
+                            <small class="form-text">拖拽滑块选择时间窗口位置，共520个数据点，绿色区域表示固定的400+120数据点范围</small>
+                        </div>
+                        <div class="form-group" style="margin-top:8px;">
+                            <label for="sample-count">样本数量:</label>
+                            <input type="number" id="sample-count" value="1" min="1" max="5" step="1">
+                            <small class="form-text">生成多个预测样本以提高质量（推荐1-3个）</small>
+                        </div>
+                    </div>
+
+                    <!-- 未来模式参数 -->
+                    <div id="future-params" style="display:none;">
+                        <div style="display:flex; gap:8px; margin-top:4px;">
+                            <div class="form-group" style="flex:1; min-width:0;">
+                                <label for="future-lookback">回溯条数：</label>
+                                <input type="number" id="future-lookback" value="400" min="50" max="500">
+                                <small class="form-text">建议 400</small>
+                            </div>
+                            <div class="form-group" style="flex:1; min-width:0;">
+                                <label for="future-pred-len">预测条数：</label>
+                                <input type="number" id="future-pred-len" value="30" min="5" max="120">
+                                <small class="form-text">30≈1.5月</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模型状态 全宽 -->
+                <div id="model-status" class="status info" style="display: none; grid-column: 1 / -1;">Model status information</div>
+
+                <!-- 质量参数 + 开始预测 -->
+                <div class="panel-group" style="grid-column:1/-1;display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:24px;flex-wrap:nowrap;">
+                    <!-- 预测温度 -->
+                    <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                        <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                            <label for="temperature" style="font-size:0.85em;color:#94a3b8;margin:0;">预测温度 (T)</label>
+                            <span id="temperature-value" style="font-size:0.9em;font-weight:600;color:#60a5fa;">1.0</span>
+                        </div>
+                        <input type="range" id="temperature" value="1.0" min="0.1" max="2.0" step="0.1" style="width:100%;">
+                        <span style="font-size:0.75em;color:#475569;">值越高预测越发散多样，值越低越保守集中</span>
+                    </div>
+                    <!-- 核采样 -->
+                    <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                        <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                            <label for="top-p" style="font-size:0.85em;color:#94a3b8;margin:0;">核采样 (top_p)</label>
+                            <span id="top-p-value" style="font-size:0.9em;font-weight:600;color:#60a5fa;">0.9</span>
+                        </div>
+                        <input type="range" id="top-p" value="0.9" min="0.1" max="1.0" step="0.1" style="width:100%;">
+                        <span style="font-size:0.75em;color:#475569;">控制采样范围，越高考虑越广泛的概率分布</span>
+                    </div>
+                    <!-- 开始预测 -->
+                    <button id="predict-btn" class="btn btn-success" disabled style="white-space:nowrap;align-self:flex-end;">开始预测</button>
+                </div>
+
+                <!-- Loading Status -->
+                <div id="loading" class="loading" style="grid-column: 1 / -1;">
+                    <div class="spinner"></div>
+                    <p>Processing, please wait...</p>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h2 id="chart-title">预测图表</h2>
+                <!-- 未来预测信息栏（仅未来预测结果时显示） -->
+                <div id="future-chart-info" style="display:none; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:14px; margin-bottom:16px; font-size:0.9em; color:#8b949e;">
+                    <strong style="color:#e6edf3;">预测信息</strong>
+                    <span style="margin-left:16px;">数据截止：<strong id="future-cutoff" style="color:#FFD700;"></strong></span>
+                    <span style="margin-left:16px;">预测区间：<strong id="future-range" style="color:#ff7f0e;"></strong></span>
+                    <span style="margin-left:16px;">历史输入：<strong id="future-used-rows" style="color:#58a6ff;"></strong> 条</span>
+                </div>
+                <div id="chart"></div>
+                
+                <!-- Comparison Analysis -->
+                <div id="comparison-section" class="comparison-section" style="display: none;">
+                    <h3>预测与实际数据对比</h3>
+                    <div id="comparison-info" class="comparison-info">
+                        <p><strong>预测类型:</strong> <span id="prediction-type">-</span></p>
+                        <p><strong>对比数据:</strong> <span id="comparison-data">-</span></p>
+                    </div>
+                    
+                    <div class="error-stats">
+                        <div class="error-stat">
+                            <h4>平均绝对误差（MAE）</h4>
+                            <div class="value" id="mae">-</div>
+                            <div class="unit">价格单位</div>
+                        </div>
+                        <div class="error-stat">
+                            <h4>均方根误差（RMSE）</h4>
+                            <div class="value" id="rmse">-</div>
+                            <div class="unit">价格单位</div>
+                        </div>
+                        <div class="error-stat">
+                            <h4>平均绝对百分比误差（MAPE）</h4>
+                            <div class="value" id="mape">-</div>
+                            <div class="unit">%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="error-details">
+                        <h4>对比数据明细：</h4>
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            <table class="comparison-table">
+                                <thead>
+                                    <tr>
+                                        <th>时间</th>
+                                        <th>实际开盘</th>
+                                        <th>预测开盘</th>
+                                        <th>实际最高</th>
+                                        <th>预测最高</th>
+                                        <th>实际最低</th>
+                                        <th>预测最低</th>
+                                        <th>实际收盘</th>
+                                        <th>预测收盘</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="comparison-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- 未来预测数据表（仅未来预测结果时显示） -->
+                <div id="future-data-table-section" style="display:none; margin-top:20px;">
+                    <h3 style="color:#e6edf3; margin-bottom:10px;">预测数据明细</h3>
+                    <div style="max-height:280px; overflow-y:auto;">
+                        <table class="comparison-table">
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>开盘（预测）</th>
+                                    <th>最高（预测）</th>
+                                    <th>最低（预测）</th>
+                                    <th>收盘（预测）</th>
+                                    <th>成交量（预测）</th>
+                                </tr>
+                            </thead>
+                            <tbody id="future-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Global variables
+        let currentDataFile = null;
+        let currentDataInfo = null;
+        let availableModels = [];
+        let modelLoaded = false;
+
+        // Initialize after page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+        });
+
+        // Initialize application
+        async function initializeApp() {
+            console.log('正在初始化Kronos Web UI...');
+            
+            // Load available models
+            await loadAvailableModels();
+            
+            // Load data file list
+            await loadDataFiles();
+            
+            // Set up event listeners
+            setupEventListeners();
+            
+            // Initialize time slider
+            initializeTimeSlider();
+            
+            console.log(' 应用程序初始化完成');
+        }
+
+        // Load available models
+        async function loadAvailableModels() {
+            try {
+                const response = await axios.get('/api/available-models');
+                if (response.data.model_available) {
+                    availableModels = response.data.models;
+                    populateModelSelect();
+                    console.log(' 可用模型加载成功:', availableModels);
+                } else {
+                    console.warn(' Kronos模型库不可用');
+                    showStatus('warning', 'Kronos模型库不可用，将使用简化技术分析预测');
+                }
+            } catch (error) {
+                console.error(' 加载可用模型失败:', error);
+                showStatus('error', '加载可用模型失败');
+            }
+        }
+
+        // Populate model selection dropdown
+        function populateModelSelect() {
+            const modelSelect = document.getElementById('model-select');
+            modelSelect.innerHTML = '<option value="">请选择模型</option>';
+            
+            Object.entries(availableModels).forEach(([key, model]) => {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = `${model.name} (${model.params}) - ${model.description}`;
+                modelSelect.appendChild(option);
+            });
+        }
+
+        // Load model
+        async function loadModel() {
+            const modelKey = document.getElementById('model-select').value;
+            const device = document.getElementById('device-select').value;
+            
+            if (!modelKey) {
+                showStatus('error', '请选择要加载的模型');
+                return;
+            }
+            
+            try {
+                showLoading(true);
+                document.getElementById('load-model-btn').disabled = true;
+                
+                const response = await axios.post('/api/load-model', {
+                    model_key: modelKey,
+                    device: device
+                });
+                
+                if (response.data.success) {
+                    modelLoaded = true;
+                    showStatus('success', response.data.message);
+                    updateModelStatus();
+                    document.getElementById('predict-btn').disabled = false;
+                    console.log(' 模型加载成功:', response.data.model_info);
+                } else {
+                    showStatus('error', response.data.error);
+                }
+            } catch (error) {
+                console.error(' 模型加载失败:', error);
+                showStatus('error', `模型加载失败: ${error.response?.data?.error || error.message}`);
+            } finally {
+                showLoading(false);
+                document.getElementById('load-model-btn').disabled = false;
+            }
+        }
+
+        // Update model status
+        async function updateModelStatus() {
+            try {
+                const response = await axios.get('/api/model-status');
+                const status = response.data;
+                
+                if (status.loaded) {
+                    showStatus('success', `模型已加载: ${status.current_model.name} 在 ${status.current_model.device} 设备上`);
+                } else if (status.available) {
+                    showStatus('info', '模型可用但未加载');
+                } else {
+                    showStatus('warning', '模型库不可用');
+                }
+            } catch (error) {
+                console.error(' 获取模型状态失败:', error);
+            }
+        }
+
+        // Load data file list
+        async function loadDataFiles() {
+            try {
+                const response = await axios.get('/api/data-files');
+                const dataFiles = response.data;
+                
+                const dataFileSelect = document.getElementById('data-file-select');
+                dataFileSelect.innerHTML = '<option value="">请选择数据文件</option>';
+                
+                dataFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.path;
+                    option.textContent = `${file.name} (${file.size})`;
+                    dataFileSelect.appendChild(option);
+                });
+                
+                console.log(' 数据文件列表加载成功:', dataFiles);
+            } catch (error) {
+                console.error(' 加载数据文件列表失败:', error);
+                showStatus('error', '加载数据文件列表失败');
+            }
+        }
+
+        // Load data file
+        async function loadData() {
+            const filePath = document.getElementById('data-file-select').value;
+            
+            if (!filePath) {
+                showStatus('error', '请选择要加载的数据文件');
+                return;
+            }
+            
+            try {
+                showLoading(true);
+                document.getElementById('load-data-btn').disabled = true;
+                
+                const response = await axios.post('/api/load-data', {
+                    file_path: filePath
+                });
+                
+                if (response.data.success) {
+                    currentDataFile = filePath;
+                    currentDataInfo = response.data.data_info;
+                    showDataInfo(response.data.data_info);
+                    showStatus('success', response.data.message);
+                    
+                    // Update prediction button status
+                    if (modelLoaded) {
+                        document.getElementById('predict-btn').disabled = false;
+                    }
+                    
+                    console.log(' 数据加载成功:', response.data.data_info);
+                } else {
+                    showStatus('error', response.data.error);
+                }
+            } catch (error) {
+                console.error(' 数据加载失败:', error);
+                showStatus('error', `数据加载失败: ${error.response?.data?.error || error.message}`);
+            } finally {
+                showLoading(false);
+                document.getElementById('load-data-btn').disabled = false;
+            }
+        }
+
+        // Display data information
+        function showDataInfo(dataInfo) {
+            document.getElementById('data-info').style.display = 'block';
+            document.getElementById('data-rows').textContent = dataInfo.rows;
+            document.getElementById('data-cols').textContent = dataInfo.columns.length;
+            document.getElementById('data-time-range').textContent = `${dataInfo.start_date} to ${dataInfo.end_date}`;
+            document.getElementById('data-price-range').textContent = `${dataInfo.price_range.min.toFixed(4)} - ${dataInfo.price_range.max.toFixed(4)}`;
+            document.getElementById('data-timeframe').textContent = dataInfo.timeframe;
+            document.getElementById('data-prediction-cols').textContent = dataInfo.prediction_columns.join(', ');
+            
+            // Initialize time window slider
+            initializeTimeWindowSlider(dataInfo);
+        }
+
+                    // Time window slider related variables
+        let sliderData = null;
+        let isDragging = false;
+        let currentHandle = null;
+
+        // Initialize time window slider
+        function initializeTimeSlider() {
+            // Set up slider event listeners
+            setupSliderEventListeners();
+        }
+
+        // Set up slider event listeners
+        function setupSliderEventListeners() {
+            const startHandle = document.getElementById('start-handle');
+            const endHandle = document.getElementById('end-handle');
+            const track = document.querySelector('.slider-track');
+            
+            // Start dragging
+            startHandle.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                currentHandle = 'start';
+                e.preventDefault();
+            });
+            
+            endHandle.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                currentHandle = 'end';
+                e.preventDefault();
+            });
+            
+            // Dragging
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                
+                const rect = track.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const percentage = Math.max(0, Math.min(1, x / rect.width));
+                
+                if (currentHandle === 'start') {
+                    updateStartHandle(percentage);
+                } else if (currentHandle === 'end') {
+                    updateEndHandle(percentage);
+                }
+                
+                updateSliderFromHandles();
+            });
+            
+            // End dragging
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                currentHandle = null;
+            });
+            
+            // Click track to set position directly
+            track.addEventListener('click', (e) => {
+                const rect = track.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const percentage = Math.max(0, Math.min(1, x / rect.width));
+                
+                // Determine which handle is closer to the click position
+                const startHandle = document.getElementById('start-handle');
+                const endHandle = document.getElementById('end-handle');
+                const startRect = startHandle.getBoundingClientRect();
+                const endRect = endHandle.getBoundingClientRect();
+                
+                if (Math.abs(x - (startRect.left - rect.left)) < Math.abs(x - (endRect.left - rect.left))) {
+                    updateStartHandle(percentage);
+                } else {
+                    updateEndHandle(percentage);
+                }
+                
+                updateSliderFromHandles();
+            });
+        }
+
+        // Update start handle position
+        function updateStartHandle(percentage) {
+            const startHandle = document.getElementById('start-handle');
+            const selection = document.getElementById('slider-selection');
+            
+            // Fixed window size of 520 data points
+            const windowSize = 520;
+            const totalRows = sliderData ? sliderData.totalRows : 1000;
+            const windowPercentage = windowSize / totalRows;
+            
+            // Ensure start handle doesn't cause window to exceed data range
+            if (percentage + windowPercentage > 1) {
+                percentage = 1 - windowPercentage;
+            }
+            
+            startHandle.style.left = (percentage * 100) + '%';
+            selection.style.left = (percentage * 100) + '%';
+            selection.style.width = (windowPercentage * 100) + '%';
+            
+            // Automatically adjust end handle position to maintain fixed window size
+            const endHandle = document.getElementById('end-handle');
+            endHandle.style.left = ((percentage + windowPercentage) * 100) + '%';
+        }
+
+        // Update end handle position
+        function updateEndHandle(percentage) {
+            const endHandle = document.getElementById('end-handle');
+            const selection = document.getElementById('slider-selection');
+            
+            // Fixed window size of 520 data points
+            const windowSize = 520;
+            const totalRows = sliderData ? sliderData.totalRows : 1000;
+            const windowPercentage = windowSize / totalRows;
+            
+            // Ensure end handle doesn't cause window to exceed data range
+            if (percentage - windowPercentage < 0) {
+                percentage = windowPercentage;
+            }
+            
+            endHandle.style.left = (percentage * 100) + '%';
+            selection.style.left = ((percentage - windowPercentage) * 100) + '%';
+            selection.style.width = (windowPercentage * 100) + '%';
+            
+            // Automatically adjust start handle position to maintain fixed window size
+            const startHandle = document.getElementById('start-handle');
+            startHandle.style.left = ((percentage - windowPercentage) * 100) + '%';
+        }
+
+        // Update slider display based on handle positions
+        function updateSliderFromHandles() {
+            const startHandle = document.getElementById('start-handle');
+            const endHandle = document.getElementById('end-handle');
+            
+            const startPercentage = parseFloat(startHandle.style.left) / 100;
+            const endPercentage = parseFloat(endHandle.style.left) / 100;
+            
+            if (!sliderData) return;
+            
+            // Calculate selected time range
+            const totalTime = sliderData.endDate.getTime() - sliderData.startDate.getTime();
+            const startTime = sliderData.startDate.getTime() + (totalTime * startPercentage);
+            const endTime = sliderData.startDate.getTime() + (totalTime * endPercentage);
+            
+            const startDate = new Date(startTime);
+            const endDate = new Date(endTime);
+            
+            // Update display information
+            document.getElementById('window-start').textContent = `开始: ${startDate.toLocaleDateString()}`;
+            document.getElementById('window-end').textContent = `结束: ${endDate.toLocaleDateString()}`;
+            
+            // Display fixed window size
+            document.getElementById('window-size').textContent = `窗口大小: 400 + 120 = 520 个数据点 (固定)`;
+            
+            // Input field values remain fixed
+            document.getElementById('lookback').value = 400;
+            document.getElementById('pred-len').value = 120;
+        }
+
+        // Update slider based on input fields
+        function updateSliderFromInputs() {
+            if (!sliderData) return;
+            
+            // Fixed window size: 400 + 120 = 520 data points
+            const lookback = 400;
+            const predLen = 120;
+            const windowSize = lookback + predLen; // Fixed at 520
+            
+            // Calculate slider position
+            const totalRows = sliderData.totalRows;
+            
+            if (windowSize > totalRows) {
+                // If window size exceeds total data amount, show error
+                showStatus('error', `数据不足，需要至少 ${windowSize} 个数据点，当前只有 ${totalRows} 个可用`);
+                return;
+            }
+            
+            // Calculate slider position (default select first half of data)
+            const startPercentage = 0.1; // Start from 10%
+            const endPercentage = startPercentage + (windowSize / totalRows);
+            
+            // Update handle positions
+            updateStartHandle(startPercentage);
+            updateEndHandle(endPercentage);
+            
+            // Update display information
+            updateSliderFromHandles();
+        }
+
+        // Initialize time window slider
+        function initializeTimeWindowSlider(dataInfo) {
+            sliderData = {
+                startDate: new Date(dataInfo.start_date),
+                endDate: new Date(dataInfo.end_date),
+                totalRows: dataInfo.rows,
+                timeframe: dataInfo.timeframe
+            };
+            
+            // Set slider labels
+            document.getElementById('min-label').textContent = dataInfo.start_date.split('T')[0];
+            document.getElementById('max-label').textContent = dataInfo.end_date.split('T')[0];
+            
+            // Initialize slider position
+            updateSliderFromInputs();
+        }
+
+        // 统一预测入口
+        async function startUnifiedPrediction() {
+            const mode = document.querySelector('input[name="predict-mode"]:checked').value;
+            if (mode === 'future') {
+                await startFuturePrediction();
+            } else {
+                await startPrediction();
+            }
+        }
+
+        // Start prediction
+        async function startPrediction() {
+            if (!currentDataFile) {
+                showStatus('error', '请先加载数据文件');
+                return;
+            }
+            
+            if (!modelLoaded) {
+                showStatus('error', '请先加载模型');
+                return;
+            }
+            
+            try {
+                showLoading(true);
+                document.getElementById('predict-btn').disabled = true;
+                
+                const lookback = parseInt(document.getElementById('lookback').value);
+                const predLen = parseInt(document.getElementById('pred-len').value);
+                
+                // Get selected time range from time window slider
+                const startHandle = document.getElementById('start-handle');
+                const startPercentage = parseFloat(startHandle.style.left) / 100;
+                
+                if (!sliderData) {
+                    showStatus('error', '时间窗口滑块未初始化');
+                    return;
+                }
+                
+                // Calculate selected time range
+                const totalTime = sliderData.endDate.getTime() - sliderData.startDate.getTime();
+                const startTime = sliderData.startDate.getTime() + (totalTime * startPercentage);
+                const startDate = new Date(startTime);
+                
+                // Get prediction quality parameters
+                const temperature = parseFloat(document.getElementById('temperature').value);
+                const topP = parseFloat(document.getElementById('top-p').value);
+                const sampleCount = parseInt(document.getElementById('sample-count').value);
+                
+                let predictionParams = {
+                    file_path: currentDataFile,
+                    lookback: lookback,
+                    pred_len: predLen,
+                    start_date: startDate.toISOString().slice(0, 16), // Format as YYYY-MM-DDTHH:MM
+                    temperature: temperature,
+                    top_p: topP,
+                    sample_count: sampleCount
+                };
+                
+                console.log('开始预测，参数:', predictionParams);
+                
+                const response = await axios.post('/api/predict', predictionParams);
+                
+                if (response.data.success) {
+                    // Display prediction results
+                    displayPredictionResult(response.data);
+                    showStatus('success', response.data.message);
+                } else {
+                    showStatus('error', response.data.error);
+                }
+            } catch (error) {
+                console.error(' 预测失败:', error);
+                showStatus('error', `预测失败: ${error.response?.data?.error || error.message}`);
+            } finally {
+                showLoading(false);
+                document.getElementById('predict-btn').disabled = false;
+            }
+        }
+
+        // Display prediction results
+        function displayPredictionResult(result) {
+            // 重置图表区域为回测模式
+            document.getElementById('chart-title').textContent = '预测图表';
+            document.getElementById('future-chart-info').style.display = 'none';
+            document.getElementById('future-data-table-section').style.display = 'none';
+
+            // Display chart
+            try {
+                const chartData = JSON.parse(result.chart);
+                if (window.Plotly && Plotly.setPlotConfig) {
+                    Plotly.setPlotConfig({locale: 'zh-CN'});
+                }
+                chartData.layout = chartData.layout || {};
+                chartData.layout.locale = 'zh-CN';
+                Plotly.newPlot('chart', chartData.data, chartData.layout, {responsive: true, displayModeBar: true, locale: 'zh-CN'});
+            } catch (e) {
+                console.error('图表渲染失败:', e);
+                showStatus('error', '图表数据解析失败，请重试');
+                return;
+            }
+            
+            // Display comparison analysis (if actual data exists)
+            if (result.has_comparison) {
+                displayComparisonAnalysis(result);
+            } else {
+                document.getElementById('comparison-section').style.display = 'none';
+            }
+        }
+
+        // Display comparison analysis
+        function displayComparisonAnalysis(result) {
+            document.getElementById('comparison-section').style.display = 'block';
+            
+            // Update comparison information
+            document.getElementById('prediction-type').textContent = result.prediction_type;
+            document.getElementById('comparison-data').textContent = `${result.actual_data.length} 个实际数据点`;
+            
+            // Calculate error statistics
+            const errorStats = getPredictionQuality(result.prediction_results, result.actual_data);
+            
+            // Display error statistics
+            document.getElementById('mae').textContent = errorStats.mae.toFixed(4);
+            document.getElementById('rmse').textContent = errorStats.rmse.toFixed(4);
+            document.getElementById('mape').textContent = errorStats.mape.toFixed(2);
+            
+            // Fill comparison table
+            fillComparisonTable(result.prediction_results, result.actual_data);
+        }
+
+        // Calculate prediction quality metrics
+        function getPredictionQuality(predictions, actuals) {
+            if (!predictions || !actuals || predictions.length === 0 || actuals.length === 0) {
+                return { mae: 0, rmse: 0, mape: 0 };
+            }
+            
+            const minLen = Math.min(predictions.length, actuals.length);
+            let mae = 0, rmse = 0, mape = 0;
+            
+            for (let i = 0; i < minLen; i++) {
+                const pred = predictions[i];
+                const act = actuals[i];
+                
+                // Use closing price to calculate errors
+                const error = Math.abs(pred.close - act.close);
+                const percentError = (error / act.close) * 100;
+                
+                mae += error;
+                rmse += error * error;
+                mape += percentError;
+            }
+            
+            mae /= minLen;
+            rmse = Math.sqrt(rmse / minLen);
+            mape /= minLen;
+            
+            return { mae, rmse, mape };
+        }
+
+                    // Fill comparison table
+        function fillComparisonTable(predictions, actuals) {
+            const tbody = document.getElementById('comparison-tbody');
+            tbody.innerHTML = '';
+            
+            const minLen = Math.min(predictions.length, actuals.length);
+            
+            for (let i = 0; i < minLen; i++) {
+                const pred = predictions[i];
+                const act = actuals[i];
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${new Date(pred.timestamp).toLocaleString()}</td>
+                    <td>${act.open.toFixed(4)}</td>
+                    <td>${pred.open.toFixed(4)}</td>
+                    <td>${act.high.toFixed(4)}</td>
+                    <td>${pred.high.toFixed(4)}</td>
+                    <td>${act.low.toFixed(4)}</td>
+                    <td>${pred.low.toFixed(4)}</td>
+                    <td>${act.close.toFixed(4)}</td>
+                    <td>${pred.close.toFixed(4)}</td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            // Load model button
+            document.getElementById('load-model-btn').addEventListener('click', loadModel);
+            
+            // Load data button
+            document.getElementById('load-data-btn').addEventListener('click', loadData);
+            
+            // Prediction button (unified)
+            document.getElementById('predict-btn').addEventListener('click', startUnifiedPrediction);
+
+            // 预测模式切换
+            document.querySelectorAll('input[name="predict-mode"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const isFuture = this.value === 'future';
+                    document.getElementById('backtest-params').style.display = isFuture ? 'none' : 'block';
+                    document.getElementById('future-params').style.display  = isFuture ? 'block' : 'none';
+                    document.getElementById('predict-btn').textContent = isFuture ? '预测未来' : '开始预测';
+                });
+            });
+
+            // Predict by stock code
+            document.getElementById('predict-by-code-btn').addEventListener('click', startPredictionByCode);
+            document.getElementById('add-symbol-btn').addEventListener('click', addFuturesSymbol);
+
+            // Tushare Token
+            document.getElementById('save-token-btn').addEventListener('click', saveTushareToken);
+            loadTushareTokenStatus();
+
+            // TQSdk credentials
+            document.getElementById('save-tqsdk-btn').addEventListener('click', saveTqsdkCredentials);
+            loadTqsdkStatus();
+            
+            // Prediction quality parameter sliders
+            document.getElementById('temperature').addEventListener('input', function() {
+                document.getElementById('temperature-value').textContent = this.value;
+            });
+            
+            document.getElementById('top-p').addEventListener('input', function() {
+                document.getElementById('top-p-value').textContent = this.value;
+            });
+            
+            // Update slider when lookback window size changes
+            document.getElementById('lookback').addEventListener('input', updateSliderFromInputs);
+            document.getElementById('pred-len').addEventListener('input', updateSliderFromInputs);
+        }
+
+        // K线周期切换：更新标签和默认值
+        function updateKlinePeriodLabels() {
+            const period = document.getElementById('kline-period').value;
+            const intraday = period !== '1d';
+            const lookbackLabel = document.getElementById('code-lookback-label');
+            const lookbackInput = document.getElementById('code-lookback');
+            const lookbackHint  = document.getElementById('code-lookback-hint');
+            const predLabel     = document.getElementById('pred-trading-days-label');
+            const predInput     = document.getElementById('pred-trading-days');
+            const predHint      = document.getElementById('pred-trading-days-hint');
+            if (intraday) {
+                lookbackLabel.textContent = '回溯K线条数';
+                lookbackInput.min = 100; lookbackInput.max = 3000;
+                lookbackInput.value = 400;
+                const lookbackHints = { '1h':'200条≈1月，400条≈2月', '30m':'400条≈2周，800条≈1月', '15m':'400条≈1周，1600条≈1月' };
+                lookbackHint.textContent = lookbackHints[period] || '';
+                predLabel.textContent = '预测K线条数';
+                predInput.min = 10; predInput.max = 500;
+                predInput.value = 24;
+                const predHints = { '1h':'24条≈3天，建议不超过48条', '30m':'24条≈1.5天，建议不超过48条', '15m':'24条≈6小时，建议不超过48条' };
+                predHint.textContent = predHints[period] || '';
+            } else {
+                lookbackLabel.textContent = '回溯交易日数';
+                lookbackInput.min = 30; lookbackInput.max = 500;
+                lookbackInput.value = 100;
+                lookbackHint.textContent = '拉取最近 N 个交易日的历史数据，100≈5个月，250≈1年';
+                predLabel.textContent = '预测交易日数';
+                predInput.min = 5; predInput.max = 60;
+                predInput.value = 22;
+                predHint.textContent = '约1个月=22个交易日';
+            }
+        }
+
+        // ── 品种搜索自动补全 ──────────────────────────────────────────
+        let _acTimer = null, _acIdx = -1, _acList = [];
+
+        function symbolAcSearch(val) {
+            clearTimeout(_acTimer);
+            _acIdx = -1;
+            if (!val || val.length < 1) { symbolAcHide(); return; }
+            _acTimer = setTimeout(() => {
+                fetch('/api/search-symbols?q=' + encodeURIComponent(val))
+                    .then(r => r.json())
+                    .then(list => {
+                        _acList = list;
+                        const dd = document.getElementById('symbol-dropdown');
+                        if (!list.length) { dd.style.display = 'none'; return; }
+                        dd.innerHTML = list.map((r, i) =>
+                            `<div class="symbol-dd-item" data-i="${i}"
+                                  onmousedown="symbolAcSelect('${r.code}')"
+                                  onmouseover="_acIdx=${i};symbolAcMark()">
+                                <span class="sdi-code">${r.code}</span>
+                                <span class="sdi-name">${r.name || ''}</span>
+                                <span class="sdi-exchange">${r.exchange}</span>
+                            </div>`
+                        ).join('');
+                        dd.style.display = 'block';
+                    }).catch(() => {});
+            }, 200);
+        }
+
+        function symbolAcKeyNav(e) {
+            const items = document.querySelectorAll('.symbol-dd-item');
+            if (!items.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault(); _acIdx = Math.min(_acIdx + 1, items.length - 1); symbolAcMark();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault(); _acIdx = Math.max(_acIdx - 1, 0); symbolAcMark();
+            } else if (e.key === 'Enter' && _acIdx >= 0) {
+                e.preventDefault();
+                if (_acList[_acIdx]) symbolAcSelect(_acList[_acIdx].code);
+            } else if (e.key === 'Escape') {
+                symbolAcHide();
+            }
+        }
+
+        function symbolAcMark() {
+            document.querySelectorAll('.symbol-dd-item').forEach((el, i) =>
+                el.classList.toggle('sdi-active', i === _acIdx));
+        }
+
+        function symbolAcSelect(code) {
+            document.getElementById('stock-code').value = code;
+            symbolAcHide();
+        }
+
+        function symbolAcHide() {
+            const dd = document.getElementById('symbol-dropdown');
+            if (dd) dd.style.display = 'none';
+            _acIdx = -1;
+        }
+
+        // ── 品种库同步 ───────────────────────────────────────────────
+        function refreshSymbolsLib() {
+            const btn = document.getElementById('refresh-symbols-btn');
+            const status = document.getElementById('refresh-symbols-status');
+            btn.disabled = true; btn.textContent = '同步中...';
+            status.style.color = '#94a3b8'; status.textContent = '正在从天勤拉取品种列表，约需10-30秒...';
+            fetch('/api/refresh-symbols', {method: 'POST'})
+                .then(r => r.json())
+                .then(d => {
+                    if (d.error) {
+                        status.style.color = '#ef4444';
+                        status.textContent = d.error;
+                    } else {
+                        status.style.color = '#22c55e';
+                        status.textContent = d.message;
+                        loadSymbolsCacheInfo();
+                    }
+                })
+                .catch(e => { status.style.color='#ef4444'; status.textContent='请求失败'; })
+                .finally(() => { btn.disabled = false; btn.textContent = '立即同步'; });
+        }
+
+        function loadSymbolsCacheInfo() {
+            fetch('/api/symbols-cache-info')
+                .then(r => r.json())
+                .then(d => {
+                    const el = document.getElementById('symbols-cache-info');
+                    if (!el) return;
+                    if (!d.exists) { el.style.display = 'none'; return; }
+                    const t = d.updated_at ? new Date(d.updated_at).toLocaleString('zh-CN') : '未知';
+                    el.style.display = '';
+                    el.innerHTML = `<strong>${d.count}</strong> 个品种 &nbsp;·&nbsp; 最后同步：${t}`;
+                }).catch(() => {});
+        }
+
+        // Tushare Token functions
+        // 数据源配置弹窗开关
+        function dsTab(name, btn) {
+            document.querySelectorAll('.ds-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.ds-pane').forEach(p => p.classList.remove('active'));
+            document.getElementById('ds-pane-' + name).classList.add('active');
+            if (btn) btn.classList.add('active');
+        }
+        function openDatasourceModal() {
+            document.getElementById('datasource-modal').classList.add('open');
+            loadSymbolsCacheInfo();
+        }
+        function closeDatasourceModal() {
+            document.getElementById('datasource-modal').classList.remove('open');
+        }
+        function closeDatasourceOnBg(e) {
+            if (e.target === document.getElementById('datasource-modal')) closeDatasourceModal();
+        }
+
+        // 同步更新主面板和弹窗两处状态显示
+        function _setTokenStatus(configured, masked) {
+            const text = configured ? masked : '未配置';
+            const color = configured ? '#52c41a' : '#f87171';
+            ['token-status', 'token-status-modal'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = text;
+                if (el.classList.contains('ds-status-badge')) {
+                    el.classList.toggle('ok', configured);
+                    el.classList.toggle('err', !configured);
+                } else {
+                    el.style.color = color;
+                }
+            });
+        }
+        function _setTqsdkStatus(configured, username) {
+            const text = configured ? username : '未配置';
+            const color = configured ? '#52c41a' : '#f87171';
+            ['tqsdk-status', 'tqsdk-status-modal'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = text;
+                if (el.classList.contains('ds-status-badge')) {
+                    el.classList.toggle('ok', configured);
+                    el.classList.toggle('err', !configured);
+                } else {
+                    el.style.color = color;
+                }
+            });
+        }
+
+        async function loadTushareTokenStatus() {
+            try {
+                const resp = await axios.get('/api/tushare-token');
+                _setTokenStatus(resp.data.configured, resp.data.masked);
+            } catch (e) {}
+        }
+
+        async function saveTushareToken() {
+            const token = (document.getElementById('tushare-token').value || '').trim();
+            if (!token) { showStatus('error', '请输入 Tushare Token'); return; }
+            try {
+                const resp = await axios.post('/api/tushare-token', { token });
+                if (resp.data.success) {
+                    showStatus('success', resp.data.message);
+                    document.getElementById('tushare-token').value = '';
+                    loadTushareTokenStatus();
+                } else {
+                    showStatus('error', resp.data.error || '保存失败');
+                }
+            } catch (err) {
+                showStatus('error', `保存失败：${err.response?.data?.error || err.message}`);
+            }
+        }
+
+        async function loadTqsdkStatus() {
+            try {
+                const resp = await axios.get('/api/tqsdk-credentials');
+                _setTqsdkStatus(resp.data.configured, resp.data.username);
+            } catch (e) {}
+        }
+
+        async function saveTqsdkCredentials() {
+            const username = (document.getElementById('tqsdk-username').value || '').trim();
+            const password = (document.getElementById('tqsdk-password').value || '').trim();
+            if (!username || !password) { showStatus('error', '请输入天勤用户名和密码'); return; }
+            try {
+                const resp = await axios.post('/api/tqsdk-credentials', { username, password });
+                if (resp.data.success) {
+                    showStatus('success', resp.data.message);
+                    document.getElementById('tqsdk-username').value = '';
+                    document.getElementById('tqsdk-password').value = '';
+                    loadTqsdkStatus();
+                } else {
+                    showStatus('error', resp.data.error || '保存失败');
+                }
+            } catch (err) {
+                showStatus('error', `保存失败：${err.response?.data?.error || err.message}`);
+            }
+        }
+
+        // Add a custom futures symbol
+        async function addFuturesSymbol() {
+            const product  = (document.getElementById('new-symbol-product').value || '').trim();
+            const exchange = document.getElementById('new-symbol-exchange').value;
+            const name     = (document.getElementById('new-symbol-name').value || '').trim();
+            if (!product) {
+                showStatus('error', '请填写品种代码');
+                return;
+            }
+            const btn = document.getElementById('add-symbol-btn');
+            btn.disabled = true;
+            try {
+                const resp = await axios.post('/api/futures-symbols', { product, exchange, name });
+                if (resp.data.success) {
+                    showStatus('success', resp.data.message);
+                    document.getElementById('new-symbol-product').value = '';
+                    document.getElementById('new-symbol-name').value = '';
+                } else {
+                    showStatus('error', resp.data.error || '保存失败');
+                }
+            } catch (err) {
+                showStatus('error', `保存失败：${err.response?.data?.error || err.message}`);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Predict by stock/futures code workflow
+        async function startPredictionByCode() {
+            const code = (document.getElementById('stock-code').value || '').trim();
+            const predTradingDays = parseInt(document.getElementById('pred-trading-days').value || '22', 10);
+            // 期货：有交易所前缀（SHFE.rb2507）、主力连续（KQ.m@SHFE.rb）或简短形式（rb2610、SR607）
+            const isFutures = /^(KQ\.|SHFE\.|DCE\.|CZCE\.|CFFEX\.|INE\.|GFEX\.)/i.test(code)
+                           || /^[A-Za-z]{1,6}\d{3,4}$/.test(code);
+            if (!code || (!isFutures && !/^\d{6}$/.test(code))) {
+                showStatus('error', '请输入6位股票代码（如 600036）或期货代码（如 rb2610、SR607、SHFE.rb2507、KQ.m@SHFE.rb）');
+                return;
+            }
+            const klinePeriod   = document.getElementById('kline-period').value;
+            const intraday      = klinePeriod !== '1d';
+            const codeLookback  = parseInt(document.getElementById('code-lookback').value || '100', 10);
+            const minLookback   = intraday ? 100 : 30;
+            const maxLookback   = intraday ? 3000 : 500;
+            const minPred       = intraday ? 10 : 5;
+            const maxPred       = intraday ? 500 : 60;
+            if (codeLookback < minLookback || codeLookback > maxLookback) {
+                showStatus('error', `回溯条数须在 ${minLookback}～${maxLookback} 之间`);
+                return;
+            }
+            if (predTradingDays < minPred || predTradingDays > maxPred) {
+                showStatus('error', `预测条数须在 ${minPred}～${maxPred} 之间`);
+                return;
+            }
+            // Note: We can proceed even without model loaded (will use simple prediction)
+            try {
+                showLoading(true);
+                document.getElementById('predict-by-code-btn').disabled = true;
+                const temperature = parseFloat(document.getElementById('temperature').value);
+                const topP = parseFloat(document.getElementById('top-p').value);
+                const sampleCount = parseInt(document.getElementById('sample-count').value);
+                const resp = await axios.post('/api/predict-by-code', {
+                    stock_code: code,
+                    lookback: codeLookback,
+                    pred_trading_days: predTradingDays,
+                    kline_period: klinePeriod,
+                    temperature: temperature,
+                    top_p: topP,
+                    sample_count: sampleCount
+                });
+                if (resp.data.success) {
+                    try {
+                        const chartData = JSON.parse(resp.data.chart);
+                        if (window.Plotly && Plotly.setPlotConfig) {
+                            Plotly.setPlotConfig({locale: 'zh-CN'});
+                        }
+                        chartData.layout = chartData.layout || {};
+                        chartData.layout.locale = 'zh-CN';
+                        Plotly.newPlot('chart', chartData.data, chartData.layout, {responsive: true, displayModeBar: true, locale: 'zh-CN'});
+                    } catch (e) {
+                        console.error('图表渲染失败:', e);
+                        showStatus('error', '图表数据解析失败，请重试');
+                        return;
+                    }
+                    showStatus('success', resp.data.message);
+                } else {
+                    showStatus('error', resp.data.error || '预测失败');
+                }
+            } catch (err) {
+                showStatus('error', `预测失败：${err.response?.data?.error || err.message}`);
+            } finally {
+                showLoading(false);
+                document.getElementById('predict-by-code-btn').disabled = false;
+            }
+        }
+
+        // Display status information
+        function showStatus(type, message) {
+            const statusDiv = document.getElementById('model-status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            
+            // Auto-hide
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Show/hide loading status
+        function showLoading(show) {
+            const loadingDiv = document.getElementById('loading');
+            if (show) {
+                loadingDiv.classList.add('show');
+            } else {
+                loadingDiv.classList.remove('show');
+            }
+        }
+
+        // ── 使用教程弹窗 ──────────────────────────────
+        let _helpLoaded = false;
+
+        async function openHelp() {
+            document.getElementById('help-modal').classList.add('open');
+            document.body.style.overflow = 'hidden';
+            if (_helpLoaded) return;
+            try {
+                const resp = await axios.get('/api/help');
+                document.getElementById('help-modal-body').innerHTML =
+                    marked.parse(resp.data.content);
+                _helpLoaded = true;
+            } catch (e) {
+                document.getElementById('help-modal-body').innerHTML =
+                    '<p style="color:#f87171;">教程加载失败，请检查服务是否正常。</p>';
+            }
+        }
+
+        function closeHelp() {
+            document.getElementById('help-modal').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+        function closeHelpOnBg(e) {
+            if (e.target === document.getElementById('help-modal')) closeHelp();
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeHelp();
+        });
+
+        // ================================================================
+        // 预测未来功能
+        // ================================================================
+
+        async function startFuturePrediction() {
+            if (!currentDataFile) {
+                showStatus('error', '请先加载数据文件');
+                return;
+            }
+            if (!modelLoaded) {
+                showStatus('error', '请先加载模型');
+                return;
+            }
+
+            const lookback    = parseInt(document.getElementById('future-lookback').value);
+            const predLen     = parseInt(document.getElementById('future-pred-len').value);
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            const topP        = parseFloat(document.getElementById('top-p').value);
+
+            try {
+                showLoading(true);
+                document.getElementById('predict-btn').disabled = true;
+
+                const resp = await axios.post('/api/predict-future', {
+                    file_path:    currentDataFile,
+                    lookback:     lookback,
+                    pred_len:     predLen,
+                    temperature:  temperature,
+                    top_p:        topP,
+                    sample_count: 1,
+                });
+
+                if (resp.data.success) {
+                    showStatus('success', resp.data.message);
+                    displayFutureResult(resp.data);
+                } else {
+                    showStatus('error', resp.data.error || '预测失败');
+                }
+            } catch (err) {
+                showStatus('error', err.response?.data?.error || err.message || '请求失败');
+            } finally {
+                showLoading(false);
+                document.getElementById('predict-btn').disabled = false;
+            }
+        }
+
+        function displayFutureResult(result) {
+            // 信息栏
+            document.getElementById('future-cutoff').textContent   = result.cutoff_date;
+            document.getElementById('future-range').textContent    = `${result.pred_start} ~ ${result.pred_end}`;
+            document.getElementById('future-used-rows').textContent = result.used_rows;
+
+            // 图表（共用 #chart 区域）
+            const chartData = JSON.parse(result.chart);
+            chartData.layout = chartData.layout || {};
+            chartData.layout.locale = 'zh-CN';
+            Plotly.newPlot('chart', chartData.data, chartData.layout, { responsive: true, locale: 'zh-CN' });
+
+            // 切换图表区域显示状态
+            document.getElementById('chart-title').textContent = '未来预测图表';
+            document.getElementById('future-chart-info').style.display = 'block';
+            document.getElementById('comparison-section').style.display = 'none';
+
+            // 数据表
+            const tbody = document.getElementById('future-tbody');
+            tbody.innerHTML = '';
+            result.prediction_results.forEach(row => {
+                const date = row.timestamp.split('T')[0];
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${date}</td>
+                        <td>${row.open.toFixed(2)}</td>
+                        <td>${row.high.toFixed(2)}</td>
+                        <td>${row.low.toFixed(2)}</td>
+                        <td>${row.close.toFixed(2)}</td>
+                        <td>${row.volume > 0 ? Math.round(row.volume).toLocaleString() : '-'}</td>
+                    </tr>`;
+            });
+            document.getElementById('future-data-table-section').style.display = 'block';
+
+            document.querySelector('.chart-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+    </script>
+</body>
+</html>
