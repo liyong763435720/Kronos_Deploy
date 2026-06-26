@@ -61,7 +61,7 @@ _pick_python() {
         if command -v "$py" &>/dev/null; then
             local ver
             ver=$("$py" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-            if [[ $(echo "$ver >= 3.9" | bc -l) -eq 1 ]]; then
+            if "$py" -c "import sys; sys.exit(0 if sys.version_info >= (3,9) else 1)" 2>/dev/null; then
                 echo "$py"; return
             fi
         fi
@@ -99,9 +99,11 @@ fi
 VENV_PYTHON="$VENV_DIR/bin/python"
 VENV_PIP="$VENV_DIR/bin/pip"
 
-info "安装 Python 依赖..."
-"$VENV_PIP" install --upgrade pip -q
-"$VENV_PIP" install -r "$PROJECT_DIR/webui/requirements.txt" -q
+info "安装 Python 依赖（使用清华镜像源）..."
+"$VENV_PIP" install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
+"$VENV_PIP" install -r "$PROJECT_DIR/webui/requirements.txt" \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    --trusted-host pypi.tuna.tsinghua.edu.cn
 info "依赖安装完成"
 
 # ── 写入访问密码 ──────────────────────────────────────────────
