@@ -38,6 +38,10 @@ tokenizer = None
 model = None
 predictor = None
 
+# 用户上传数据文件目录
+_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
+
 # Data source configuration (Tushare + TQSdk)
 _CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'datasource_config.json')
 _OLD_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tushare_config.json')
@@ -746,28 +750,27 @@ def simple_prediction(data, pred_trading_days=22):
 
 def load_data_files():
     """Scan data directory and return available data files"""
-    # Check multiple possible data directories
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     possible_dirs = [
-        os.path.join(base_dir, 'data'),
-        os.path.join(base_dir, 'examples', 'data'),
-        os.path.join(base_dir, 'finetune_csv', 'data')
+        (_UPLOAD_DIR, True),                                          # 用户上传目录，可删除
+        (os.path.join(base_dir, 'data'), False),
+        (os.path.join(base_dir, 'examples', 'data'), False),
+        (os.path.join(base_dir, 'finetune_csv', 'data'), False),
     ]
-    
+
     data_files = []
-    
-    for data_dir in possible_dirs:
+    for data_dir, deletable in possible_dirs:
         if os.path.exists(data_dir):
-            for file in os.listdir(data_dir):
+            for file in sorted(os.listdir(data_dir)):
                 if file.endswith(('.csv', '.feather')):
                     file_path = os.path.join(data_dir, file)
                     file_size = os.path.getsize(file_path)
                     data_files.append({
                         'name': file,
                         'path': file_path,
-                        'size': f"{file_size / 1024:.1f} KB" if file_size < 1024*1024 else f"{file_size / (1024*1024):.1f} MB"
+                        'size': f"{file_size / 1024:.1f} KB" if file_size < 1024*1024 else f"{file_size / (1024*1024):.1f} MB",
+                        'deletable': deletable,
                     })
-    
     return data_files
 
 def load_data_file(file_path):
@@ -1308,6 +1311,44 @@ def get_data_files():
     """Get available data file list"""
     data_files = load_data_files()
     return jsonify(data_files)
+
+@app.route('/api/upload-data-file', methods=['POST'])
+@login_required
+def upload_data_file():
+    """Upload a data file to uploads directory"""
+    if 'file' not in request.files:
+        return jsonify({'error': '没有选择文件'}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({'error': '文件名为空'}), 400
+    filename = f.filename
+    if not (filename.endswith('.csv') or filename.endswith('.feather')):
+        return jsonify({'error': '仅支持 .csv 和 .feather 格式'}), 400
+    # Sanitize filename: keep only safe characters
+    import re as _re
+    safe_name = _re.sub(r'[^\w.\-\u4e00-\u9fff]', '_', filename)
+    save_path = os.path.join(_UPLOAD_DIR, safe_name)
+    f.save(save_path)
+    file_size = os.path.getsize(save_path)
+    size_str = f"{file_size / 1024:.1f} KB" if file_size < 1024*1024 else f"{file_size / (1024*1024):.1f} MB"
+    return jsonify({'success': True, 'name': safe_name, 'path': save_path, 'size': size_str})
+
+@app.route('/api/delete-data-file', methods=['POST'])
+@login_required
+def delete_data_file():
+    """Delete a file from uploads directory"""
+    data = request.get_json()
+    filename = data.get('name', '')
+    if not filename:
+        return jsonify({'error': '文件名为空'}), 400
+    # Security: only allow deleting from _UPLOAD_DIR, no path traversal
+    target = os.path.realpath(os.path.join(_UPLOAD_DIR, os.path.basename(filename)))
+    if not target.startswith(os.path.realpath(_UPLOAD_DIR)):
+        return jsonify({'error': '非法路径'}), 403
+    if not os.path.exists(target):
+        return jsonify({'error': '文件不存在'}), 404
+    os.remove(target)
+    return jsonify({'success': True})
 
 @app.route('/api/load-data', methods=['POST'])
 @login_required

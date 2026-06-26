@@ -966,9 +966,20 @@
                 <div class="panel-group">
                     <div class="form-group">
                         <label for="data-file-select">选择数据文件：</label>
-                        <select id="data-file-select">
-                            <option value="">请先加载数据文件列表</option>
-                        </select>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <select id="data-file-select" style="flex:1;">
+                                <option value="">请先加载数据文件列表</option>
+                            </select>
+                            <button id="delete-data-file-btn" class="btn" title="删除选中文件"
+                                style="padding:4px 8px;background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b;border-radius:4px;cursor:pointer;font-size:0.85em;white-space:nowrap;"
+                                onclick="deleteDataFile()">🗑 删除</button>
+                        </div>
+                        <div style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                            <input type="file" id="upload-file-input" accept=".csv,.feather" style="display:none;" onchange="uploadDataFile(this)">
+                            <button class="btn btn-secondary" style="font-size:0.85em;padding:4px 10px;" onclick="document.getElementById('upload-file-input').click()">⬆ 上传文件</button>
+                            <button class="btn" style="font-size:0.85em;padding:4px 10px;background:#1f2937;border:1px solid #374151;" onclick="loadDataFiles()">↻ 刷新列表</button>
+                            <span id="upload-status" style="font-size:0.8em;color:#6b7280;"></span>
+                        </div>
                     </div>
                     <button id="load-data-btn" class="btn btn-secondary">加载数据</button>
                     <div id="data-info" class="data-info" style="display: none;">
@@ -1287,26 +1298,83 @@
             }
         }
 
+        // 存储文件元数据（含 deletable 字段）
+        let _dataFileMeta = {};
+
         // Load data file list
         async function loadDataFiles() {
             try {
                 const response = await axios.get('/api/data-files');
                 const dataFiles = response.data;
-                
+                _dataFileMeta = {};
+
                 const dataFileSelect = document.getElementById('data-file-select');
                 dataFileSelect.innerHTML = '<option value="">请选择数据文件</option>';
-                
+
                 dataFiles.forEach(file => {
+                    _dataFileMeta[file.path] = file;
                     const option = document.createElement('option');
                     option.value = file.path;
-                    option.textContent = `${file.name} (${file.size})`;
+                    option.textContent = `${file.name} (${file.size})${file.deletable ? '' : ' [只读]'}`;
                     dataFileSelect.appendChild(option);
                 });
-                
+
                 console.log(' 数据文件列表加载成功:', dataFiles);
             } catch (error) {
                 console.error(' 加载数据文件列表失败:', error);
                 showStatus('error', '加载数据文件列表失败');
+            }
+        }
+
+        // 上传数据文件
+        async function uploadDataFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const statusEl = document.getElementById('upload-status');
+            statusEl.style.color = '#6b7280';
+            statusEl.textContent = '上传中...';
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const resp = await axios.post('/api/upload-data-file', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                statusEl.style.color = '#22c55e';
+                statusEl.textContent = `✓ 上传成功: ${resp.data.name}`;
+                input.value = '';
+                await loadDataFiles();
+                // 自动选中刚上传的文件
+                const sel = document.getElementById('data-file-select');
+                for (const opt of sel.options) {
+                    if (opt.value === resp.data.path) { sel.value = opt.value; break; }
+                }
+            } catch (err) {
+                statusEl.style.color = '#ef4444';
+                statusEl.textContent = '✗ 上传失败: ' + (err.response?.data?.error || err.message);
+                input.value = '';
+            }
+        }
+
+        // 删除选中的数据文件
+        async function deleteDataFile() {
+            const sel = document.getElementById('data-file-select');
+            const filePath = sel.value;
+            if (!filePath) { showStatus('error', '请先选择要删除的文件'); return; }
+            const meta = _dataFileMeta[filePath];
+            if (!meta) { showStatus('error', '文件信息不存在'); return; }
+            if (!meta.deletable) { showStatus('error', '该文件为只读，不可删除'); return; }
+            if (!confirm(`确定要删除文件「${meta.name}」吗？此操作不可撤销。`)) return;
+            const statusEl = document.getElementById('upload-status');
+            statusEl.style.color = '#6b7280';
+            statusEl.textContent = '删除中...';
+            try {
+                await axios.post('/api/delete-data-file', { name: meta.name });
+                statusEl.style.color = '#22c55e';
+                statusEl.textContent = `✓ 已删除: ${meta.name}`;
+                await loadDataFiles();
+            } catch (err) {
+                statusEl.style.color = '#ef4444';
+                statusEl.textContent = '✗ 删除失败: ' + (err.response?.data?.error || err.message);
             }
         }
 
