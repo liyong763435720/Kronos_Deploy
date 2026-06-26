@@ -777,6 +777,7 @@
                     <button class="ds-tab active" onclick="dsTab('stock',this)">A股数据</button>
                     <button class="ds-tab" onclick="dsTab('futures',this)">期货数据</button>
                     <button class="ds-tab" onclick="dsTab('symbols',this)">品种库</button>
+                    <button class="ds-tab" onclick="dsTab('security',this);loadSecuritySettings()">访问密码</button>
                 </div>
 
                 <!-- A股数据 Tab -->
@@ -828,6 +829,23 @@
                             <button id="save-tqsdk-btn" class="btn btn-secondary" style="white-space:nowrap;">保存</button>
                         </div>
                         <div class="ds-hint">账号信息仅保存在本地配置文件中，不会上传</div>
+                    </div>
+                </div>
+
+                <!-- 访问密码 Tab -->
+                <div id="ds-pane-security" class="ds-pane">
+                    <div class="ds-field">
+                        <label>访问密码</label>
+                        <div style="font-size:0.85rem;color:#94a3b8;margin-bottom:12px;">
+                            设置后访问页面需要输入密码。<strong style="color:#fbbf24;">留空并保存即可关闭密码保护。</strong>
+                        </div>
+                        <div id="security-current" style="font-size:0.85rem;margin-bottom:12px;"></div>
+                        <div class="ds-row" style="align-items:stretch;">
+                            <input type="password" id="new-access-password" placeholder="输入新密码，留空则关闭密码保护" style="flex:1;">
+                            <button class="btn btn-secondary" style="white-space:nowrap;" onclick="saveAccessPassword()">保存</button>
+                        </div>
+                        <div id="security-save-status" style="font-size:0.85rem;margin-top:8px;"></div>
+                        <div class="ds-hint">密码保存在本地配置文件中，重启服务后生效。本地运行建议留空。</div>
                     </div>
                 </div>
 
@@ -967,7 +985,7 @@
                     <div class="form-group">
                         <label for="data-file-select">选择数据文件：</label>
                         <div style="display:flex;gap:6px;align-items:center;">
-                            <select id="data-file-select" style="flex:1;">
+                            <select id="data-file-select" style="flex:1;" onchange="updateDeleteBtn()">
                                 <option value="">请先加载数据文件列表</option>
                             </select>
                             <button id="delete-data-file-btn" class="btn" title="删除选中文件"
@@ -1319,6 +1337,7 @@
                     dataFileSelect.appendChild(option);
                 });
 
+                updateDeleteBtn();
                 console.log(' 数据文件列表加载成功:', dataFiles);
             } catch (error) {
                 console.error(' 加载数据文件列表失败:', error);
@@ -1355,16 +1374,36 @@
             }
         }
 
+        // 根据选中文件更新删除按钮状态
+        function updateDeleteBtn() {
+            const sel = document.getElementById('data-file-select');
+            const btn = document.getElementById('delete-data-file-btn');
+            const statusEl = document.getElementById('upload-status');
+            const filePath = sel.value;
+            if (!filePath) {
+                btn.disabled = true; btn.style.opacity = '0.4'; btn.title = '请先选择文件';
+                return;
+            }
+            const meta = _dataFileMeta[filePath];
+            if (meta && meta.deletable) {
+                btn.disabled = false; btn.style.opacity = '1'; btn.title = '删除选中文件';
+                statusEl.textContent = '';
+            } else {
+                btn.disabled = true; btn.style.opacity = '0.4'; btn.title = '内置文件不可删除，只有通过「上传文件」添加的文件才可删除';
+                statusEl.style.color = '#94a3b8';
+                statusEl.textContent = '内置文件不可删除';
+            }
+        }
+
         // 删除选中的数据文件
         async function deleteDataFile() {
             const sel = document.getElementById('data-file-select');
             const filePath = sel.value;
-            if (!filePath) { showStatus('error', '请先选择要删除的文件'); return; }
-            const meta = _dataFileMeta[filePath];
-            if (!meta) { showStatus('error', '文件信息不存在'); return; }
-            if (!meta.deletable) { showStatus('error', '该文件为只读，不可删除'); return; }
-            if (!confirm(`确定要删除文件「${meta.name}」吗？此操作不可撤销。`)) return;
             const statusEl = document.getElementById('upload-status');
+            if (!filePath) { statusEl.style.color='#ef4444'; statusEl.textContent='请先选择文件'; return; }
+            const meta = _dataFileMeta[filePath];
+            if (!meta || !meta.deletable) { statusEl.style.color='#ef4444'; statusEl.textContent='该文件不可删除'; return; }
+            if (!confirm(`确定要删除文件「${meta.name}」吗？此操作不可撤销。`)) return;
             statusEl.style.color = '#6b7280';
             statusEl.textContent = '删除中...';
             try {
@@ -1372,6 +1411,7 @@
                 statusEl.style.color = '#22c55e';
                 statusEl.textContent = `✓ 已删除: ${meta.name}`;
                 await loadDataFiles();
+                updateDeleteBtn();
             } catch (err) {
                 statusEl.style.color = '#ef4444';
                 statusEl.textContent = '✗ 删除失败: ' + (err.response?.data?.error || err.message);
@@ -1999,6 +2039,29 @@
             document.getElementById('ds-pane-' + name).classList.add('active');
             if (btn) btn.classList.add('active');
         }
+        async function loadSecuritySettings() {
+            try {
+                const r = await axios.get('/api/access-password');
+                const el = document.getElementById('security-current');
+                el.textContent = r.data.enabled ? '当前状态：已启用密码保护' : '当前状态：未启用密码保护（本地模式）';
+                el.style.color = r.data.enabled ? '#fbbf24' : '#22c55e';
+            } catch(e) {}
+        }
+        async function saveAccessPassword() {
+            const pwd = document.getElementById('new-access-password').value.trim();
+            const statusEl = document.getElementById('security-save-status');
+            try {
+                await axios.post('/api/access-password', { password: pwd });
+                statusEl.style.color = '#22c55e';
+                statusEl.textContent = pwd ? `✓ 密码已设置，重启生效` : '✓ 密码已关闭，重启生效';
+                document.getElementById('new-access-password').value = '';
+                loadSecuritySettings();
+            } catch(e) {
+                statusEl.style.color = '#ef4444';
+                statusEl.textContent = '✗ 保存失败: ' + (e.response?.data?.error || e.message);
+            }
+        }
+
         function openDatasourceModal() {
             document.getElementById('datasource-modal').classList.add('open');
             loadSymbolsCacheInfo();
